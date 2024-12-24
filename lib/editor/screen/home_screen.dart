@@ -70,7 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 Slider(value: controller.videoPosition.inSeconds.toDouble() ?? 0.0, onChanged: (double second){
-                  controller.
+                 // controller.
 
                 }),
                 Container(
