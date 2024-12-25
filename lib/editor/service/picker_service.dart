@@ -10,6 +10,17 @@ import 'package:permission_handler/permission_handler.dart';
 class PickerService {
   final ImagePicker _picker = ImagePicker();
 
+  Future<List<String>> generateThumbnails(String videoPath, ) async {
+    List<String> thumbnailPaths = [];
+    Directory? directory = await getExternalStorageDirectory();
+    for (int i = 0; i < 10; i++) {
+      String thumbnailPath = '$directory/thumbnail_$i.jpg';
+      String command = '-i $videoPath -vf "select=eq(n\\,$i)" -vframes 1 $thumbnailPath';
+      await FFmpegKit.execute(command);
+      thumbnailPaths.add(thumbnailPath);
+    }
+    return thumbnailPaths;
+  }
   void requestStoragePermission() async {
     // Kiểm tra hệ điều hành và yêu cầu quyền tương ứng
     if (Platform.isAndroid) {

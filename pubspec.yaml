@@ -22,6 +22,7 @@ dependencies:
   google_fonts: ^5.0.0
   video_editor: ^3.0.0
   cupertino_icons: ^1.0.8
+  fraction: ^4.1.4
 
 dev_dependencies:
   flutter_test:
