@@ -19,17 +19,19 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int lastScrollTime = 0;
+  int curentVideoTime = 0;
   int totalTime = 0;
   List<Media> media = [];
   bool isLoading = false;
   VideoPlayerController? videoPlayerController;
   Color colorText = Colors.white;
   PickerService pickerService = PickerService();
-  List<File> _selectedFiles = [];
-  File? file;
+
+  // File? file;
   String? outputVideoPath;
   bool isPlaying = false;
-  List<File> _thumbnails = [];
+
+  //List<File> _thumbnails = [];
   final double height = 60;
   ScrollController? scrollController1;
   ScrollController? scrollController2;
@@ -40,8 +42,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   //List<String?> thumbnails = [];
   double playheadPosition = 0.0;
-  double _maxDuration = 6.0;
+
+  // double _maxDuration = 6.0;
   int _currentVideoIndex = 0;
+
   List<TimelineBlock> timelines = [
     TimelineBlock(
       start: 0,
@@ -90,16 +94,16 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     scrollController1 = ScrollController();
     scrollController2 = ScrollController()..addListener(updateTimeLine);
-    if (_selectedFiles.isNotEmpty) _initializeAndPlayVideo(_currentVideoIndex);
+    if (media.isNotEmpty) _initializeAndPlayVideo(_currentVideoIndex);
   }
 
   void _initializeAndPlayVideo(int index) {
     if (videoPlayerController != null) {
       videoPlayerController!.dispose(); // Giải phóng bộ nhớ cho controller cũ
     }
-    if (_selectedFiles[index] != null) {
+    if (index < media.length) {
       videoPlayerController = VideoPlayerController.file(
-        _selectedFiles[index],
+        media[index].file,
       )..initialize().then((_) async {
           print(
               "=================================================Controller initialized successfully");
@@ -115,7 +119,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _playNextVideo();
             }
           });
-          videoPlayerController!.play(); // Đảm bảo video được phát
+          videoPlayerController!.play();
+          isPlaying = true; // Đảm bảo video được phát
         }).catchError((error) {
           print(
               "========================================================Error during initialization: $error");
@@ -125,12 +130,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _scrollBasedOnVideoPosition() {
     if (videoPlayerController != null) {
-      int currentTime = videoPlayerController!.value.position.inSeconds;
+      int currentTime =
+          videoPlayerController!.value.position.inSeconds + curentVideoTime;
       if (currentTime - lastScrollTime >= 1) {
-        double position = scrollController2!.position.pixels + 50;
+        double position = scrollController2!.position.pixels + 80;
         scrollController2!.animateTo(
-          position,
-          duration: Duration(milliseconds: 0),
+          position % (totalTime * 80),
+          duration: const Duration(milliseconds: 30),
           curve: Curves.easeInOut,
         );
 
@@ -142,28 +148,58 @@ class _HomeScreenState extends State<HomeScreen> {
   void updateTimeLine() {
     if (scrollController1!.hasClients) {
       scrollController1!.animateTo(scrollController2!.offset,
-          duration: Duration(milliseconds: 10), curve: Curves.easeInOut);
-      double scrollPosition = scrollController2!.offset;
-      videoPlayerController!.seekTo(Duration(seconds: scrollPosition.toInt()));
-      //scrollController1!.jumpTo(scrollController2!.offset);
+          duration: const Duration(milliseconds: 10), curve: Curves.easeInOut);
+
+      // if (!videoPlayerController!.value.isPlaying) {
+      //   double scrollPosition = scrollController2!.offset;
+      //   videoPlayerController!
+      //       .seekTo(Duration(seconds: scrollPosition.toInt()));
+      // }
+    }
+    if (lastScrollTime / 80 > totalTime) {
+      setState(() {
+        lastScrollTime = 0;
+      });
     }
   }
 
+  int indexOfMedia() {
+    for (int i = 0; i < media.length; i++) {
+      if (lastScrollTime >= media[i].start && lastScrollTime <= media[i].end)
+        return i;
+    }
+    return -1;
+  }
+
   void _playNextVideo() {
-    if (_currentVideoIndex < _selectedFiles.length - 1) {
+    if (_currentVideoIndex < media.length - 1) {
+      print(
+          "====================================================== curentvideoindex = $_currentVideoIndex");
+      print(
+          "====================================================== total = $totalTime");
       setState(() {
+        curentVideoTime +=
+            (media[_currentVideoIndex].end - media[_currentVideoIndex].start);
         _currentVideoIndex++;
         _initializeAndPlayVideo(_currentVideoIndex);
+        videoPlayerController!.play();
+        isPlaying = true;
       });
-
-      _initializeAndPlayVideo(_currentVideoIndex);
-      videoPlayerController!.play();
     } else {
       setState(() {
-        videoPlayerController!.pause();
+        print(
+            "====================================================== curentvideoindex1 = $_currentVideoIndex");
         _currentVideoIndex = 0;
+        lastScrollTime = 0;
+        curentVideoTime = 0;
+
+        _initializeAndPlayVideo(_currentVideoIndex);
+        isPlaying = false;
+        videoPlayerController!.pause();
+        print(
+            "====================================================== curentvideoindex2 = $_currentVideoIndex");
       });
-      lastScrollTime = 0;
+
       log("===================Đã phát hết danh sách video.");
     }
   }
@@ -171,20 +207,18 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     scrollController1!.dispose();
     scrollController2!.dispose();
-
-    //controller!.removeListener(_updateScrollPosition);
     super.dispose();
   }
 
-  Future<void> _generateThumbnails() async {
+  Future<void> _generateThumbnails(List<File> selections) async {
     setState(() {
       isLoading = true;
     });
     final tempDir = await getTemporaryDirectory();
 
-    for (int k = 0; k < _selectedFiles.length; k++) {
+    for (int k = 0; k < selections.length; k++) {
       // Tạo một VideoPlayerController mới cho video hiện tại
-      final tempController = VideoPlayerController.file(_selectedFiles[k]);
+      final tempController = VideoPlayerController.file(selections[k]);
       await tempController.initialize(); // Đảm bảo khởi tạo xong
 
       final int length =
@@ -192,22 +226,15 @@ class _HomeScreenState extends State<HomeScreen> {
       print("============================================ Duration = $length");
 
       List<File> files = [];
-      totalTime += length;
 
       if (length > 0) {
         for (int i = 0; i < length; i++) {
-          // Lấy thumbnail tại mỗi giây (timeMs = i * 1000)
-          int timeMs = i * 1000; // Lấy thumbnail mỗi giây
+          int timeMs = i * 1000;
           print("=============================================$timeMs");
-
-          // Tạo tên file duy nhất cho mỗi thumbnail
-          final String thumbnailFileName =
-              'thumbnail_${k}_${i}.png'; // Tên file thumbnail duy nhất
+          final String thumbnailFileName = 'thumbnail_${k}_${i}.png';
           final String thumbnailPath = '${tempDir.path}/$thumbnailFileName';
-
-          // Tạo thumbnail và lưu vào file
           final result = await VideoThumbnail.thumbnailFile(
-            video: _selectedFiles[k].path,
+            video: selections[k].path,
             thumbnailPath: thumbnailPath,
             imageFormat: ImageFormat.PNG,
             timeMs: timeMs,
@@ -217,21 +244,19 @@ class _HomeScreenState extends State<HomeScreen> {
           if (result != null) {
             files.add(File(result));
             setState(() {
-              _thumbnails.add(File(result));
+              // _thumbnails.add(File(result));
             });
           }
         }
       }
 
-      // Lưu thông tin media
       media.add(Media(
-        file: _selectedFiles[k],
-        end: totalTime,
-        start: totalTime + length,
+        file: selections[k],
+        end: totalTime + length,
+        start: totalTime,
         images: files,
       ));
-
-      // Giải phóng controller sau khi dùng xong
+      totalTime += length;
       await tempController.dispose();
     }
 
@@ -239,18 +264,6 @@ class _HomeScreenState extends State<HomeScreen> {
       isLoading = false;
     });
   }
-
-  // void _updateScrollPosition() {
-  //   if (videoPlayerController!.value.isPlaying) {
-  //     final double position =
-  //         controller!.trimPosition * controller!.videoDuration.inSeconds * 100;
-  //     scrollController!.animateTo(
-  //       position,
-  //       duration: Duration(milliseconds: 200),
-  //       curve: Curves.easeOut,
-  //     );
-  //   }
-  // }
 
   @override
   Widget build(BuildContext context) {
@@ -260,14 +273,14 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text(""),
         actions: [
           IconButton(
-            icon: Icon(
+            icon: const Icon(
               Icons.light,
               color: Colors.white,
             ),
             onPressed: () {},
           ),
           IconButton(
-              icon: Icon(
+              icon: const Icon(
                 Icons.cancel,
                 color: Colors.white,
               ),
@@ -276,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: isLoading
           ? Container(
-              child: Center(child: CircularProgressIndicator()),
+              child: const Center(child: CircularProgressIndicator()),
             )
           : Column(children: [
               videoPlayerController == null
@@ -284,37 +297,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   : Expanded(
                       flex: 1,
                       child: Container(
-                        padding: EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(10),
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
                             VideoPlayer(videoPlayerController!),
-                            AnimatedBuilder(
-                              animation: videoPlayerController!,
-                              builder: (_, __) => AnimatedOpacity(
-                                opacity: videoPlayerController!.value.isPlaying
-                                    ? 0
-                                    : 1,
-                                duration: kThemeAnimationDuration,
-                                child: GestureDetector(
-                                  onTap: videoPlayerController!.value.isPlaying
-                                      ? videoPlayerController!.pause
-                                      : videoPlayerController!.play,
-                                  child: Container(
-                                    width: 40,
-                                    height: 40,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow,
-                                      color: Colors.black,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -357,7 +344,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     });
                                                   }
                                                 : null,
-                                            // Không hoạt động nếu videoPlayerController chưa được khởi tạo
                                             icon: Icon(
                                               isPlaying
                                                   ? Icons.pause
@@ -368,13 +354,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ],
                                       ),
                                     ),
-                                    SizedBox(height: 5),
+                                    const SizedBox(height: 5),
                                     Container(
                                       height: 40,
                                       margin:
-                                          EdgeInsets.symmetric(horizontal: 16),
+                                          const EdgeInsets.symmetric(horizontal: 16),
                                       child: SingleChildScrollView(
-                                        physics: NeverScrollableScrollPhysics(),
+                                        physics: const NeverScrollableScrollPhysics(),
                                         scrollDirection: Axis.horizontal,
                                         controller: scrollController1,
                                         child: Row(
@@ -385,22 +371,25 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ]..addAll(List.generate(totalTime + 5,
                                                   (index) {
                                                 return Container(
-                                                  width: 50,
+                                                  width: 80,
                                                   child: Text(
-                                                    "$index",
-                                                    style: TextStyle(
+                                                    "${formatTime(index.toDouble())}",
+                                                    style: const TextStyle(
                                                         color: Colors.white),
                                                   ),
                                                 );
                                               }))),
                                       ),
                                     ),
-                                    SizedBox(height: 5),
+                                    const SizedBox(height: 5),
                                     Container(
                                       height: 60,
                                       margin:
-                                          EdgeInsets.symmetric(horizontal: 16),
+                                          const EdgeInsets.symmetric(horizontal: 16),
                                       child: SingleChildScrollView(
+                                          physics: isPlaying
+                                              ? const NeverScrollableScrollPhysics()
+                                              : null,
                                           scrollDirection: Axis.horizontal,
                                           controller: scrollController2,
                                           child: Row(
@@ -415,7 +404,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                             mediaItem.images
                                                                 .map((image) =>
                                                                     Container(
-                                                                      width: 50,
+                                                                      width: 80,
                                                                       decoration: BoxDecoration(
                                                                           border: Border.all(
                                                                               width: 1,
@@ -437,22 +426,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     Container(
                                                       width: 50,
                                                     ),
-                                                    Icon(
+                                                    const Icon(
                                                       Icons.arrow_forward_ios,
                                                       size: 30,
                                                       color: Colors.white,
                                                     ),
-                                                    Icon(
+                                                    const Icon(
                                                       Icons.arrow_forward_ios,
                                                       size: 30,
                                                       color: Colors.white,
                                                     ),
-                                                    Icon(
+                                                    const Icon(
                                                       Icons.arrow_forward_ios,
                                                       size: 30,
                                                       color: Colors.white,
                                                     ),
-                                                    Icon(
+                                                    const Icon(
                                                       Icons.arrow_forward_ios,
                                                       size: 30,
                                                       color: Colors.white,
@@ -462,7 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                               ))),
                                           )),
                                     ),
-                                    SizedBox(height: 10),
+                                    const SizedBox(height: 10),
                                     Container(
                                       height:
                                           200, // Giới hạn chiều cao cho ListView thứ 2
@@ -477,7 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   child: Center(
                                                     child: Text(
                                                       "${timelines[index].content}",
-                                                      style: TextStyle(
+                                                      style: const TextStyle(
                                                           color: Colors.white),
                                                     ),
                                                   ),
@@ -515,9 +504,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       onPressed: () {
                                         _showOptions();
                                       },
-                                      icon: Icon(Icons.add)),
+                                      icon: const Icon(Icons.add)),
                                 ),
-                                SizedBox(
+                                const SizedBox(
                                   height: 20,
                                 ),
                                 Container(
@@ -529,9 +518,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                       onPressed: () {
                                         _showOptions();
                                       },
-                                      icon: Icon(Icons.music_note_outlined)),
+                                      icon: const Icon(Icons.music_note_outlined)),
                                 ),
-                                SizedBox(
+                                const SizedBox(
                                   height: 20,
                                 ),
                                 Container(
@@ -543,7 +532,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       onPressed: () {
                                         _showAddText();
                                       },
-                                      icon: Icon(Icons.text_format)),
+                                      icon: const Icon(Icons.text_format)),
                                 ),
                               ],
                             )),
@@ -583,9 +572,10 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: Icon(Icons.camera_alt),
-              title: Text('Chụp ảnh'),
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Chụp ảnh'),
               onTap: () async {
+                List<File> _selectedFiles = [];
                 Navigator.pop(context);
                 _selectedFiles
                     .add(File(await pickerService.captureImageFromCamera()));
@@ -594,9 +584,10 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.videocam),
-              title: Text('Quay video'),
+              leading: const Icon(Icons.videocam),
+              title: const Text('Quay video'),
               onTap: () async {
+                List<File> _selectedFiles = [];
                 Navigator.pop(context);
                 _selectedFiles.add(File(await pickerService.captureVideo()));
                 outputVideoPath = await pickerService.createVideoFromImages(
@@ -604,20 +595,21 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.upload_file),
-              title: Text('Tải lên nhiều tệp'),
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Tải lên nhiều tệp'),
               onTap: () async {
                 Navigator.pop(context);
+                List<File> _selectedFiles = [];
                 final files = await pickerService.pickMultipleFiles();
                 _selectedFiles
                     .addAll(files.map((files) => (File(files))).toList());
-                await _generateThumbnails();
+                await _generateThumbnails(_selectedFiles);
                 setState(() {
                   if (_selectedFiles.isNotEmpty) {
-                    _thumbnails = _thumbnails;
+                    // _thumbnails = _thumbnails;
                     _initializeAndPlayVideo(_currentVideoIndex);
                   }
-                  _thumbnails = _thumbnails;
+                  // _thumbnails = _thumbnails;
                 });
                 outputVideoPath = outputVideoPath;
               },
