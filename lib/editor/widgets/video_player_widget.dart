@@ -4,7 +4,9 @@ import 'package:editor_app/editor/screen/crop_page.dart';
 import 'package:editor_app/editor/service/export_service.dart';
 import 'package:editor_app/editor/widgets/export_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:video_editor/video_editor.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class VideoEditor extends StatefulWidget {
   const VideoEditor({super.key, required this.file});
@@ -358,3 +360,242 @@ class _VideoEditorState extends State<VideoEditor> {
     );
   }
 }
+
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Video Editor with Thumbnails',
+      home: VideoEditorPage(),
+    );
+  }
+}
+
+class VideoEditorPage extends StatefulWidget {
+  @override
+  _VideoEditorPageState createState() => _VideoEditorPageState();
+}
+
+class _VideoEditorPageState extends State<VideoEditorPage> {
+  double startValue = 0.0; // Giá trị bắt đầu
+  double endValue = 6.0; // Giá trị kết thúc
+  double maxDuration = 6.0; // Thời gian video tối đa (giả lập)
+  List<String?> thumbnails = []; // Danh sách đường dẫn thumbnail
+  final String videoPath = 'assets/sample_video.mp4'; // Đường dẫn video
+
+  @override
+  void initState() {
+    super.initState();
+    _generateThumbnails();
+  }
+
+  // Tạo danh sách thumbnails từ video
+  Future<void> _generateThumbnails() async {
+    final tempDir = await getTemporaryDirectory();
+    for (int i = 0; i < 20; i++) {
+      // Lấy thumbnail tại các khung khác nhau
+      final thumbnailPath = await VideoThumbnail.thumbnailFile(
+        video: videoPath,
+        thumbnailPath: tempDir.path,
+        imageFormat: ImageFormat.PNG,
+        timeMs: (i * 300).toInt(), // Lấy mỗi 300ms
+        quality: 50,
+      );
+
+      setState(() {
+        thumbnails.add(thumbnailPath);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Column(
+        children: [
+          // Vùng hiển thị video/hình ảnh
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  color: Colors.grey[900],
+                  child: Center(
+                    child: Text(
+                      'Video/Photo Preview',
+                      style: TextStyle(color: Colors.white, fontSize: 24),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Thanh timeline (TrimSlider)
+          Container(
+            height: 150,
+            color: Colors.black,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Hiển thị thumbnails
+                Container(
+                  height: 60,
+                  margin: EdgeInsets.symmetric(horizontal: 16),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: thumbnails.length,
+                    itemBuilder: (context, index) {
+                      return Container(
+                        width: 50,
+                        margin: EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[700],
+                          border: Border.all(color: Colors.white, width: 1),
+                        ),
+                        child: thumbnails[index] != null
+                            ? Image.file(File(thumbnails[index]!))
+                            : Center(
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(height: 8),
+
+                // Thanh kéo chỉnh thời gian
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: RangeSlider(
+                    values: RangeValues(startValue, endValue),
+                    min: 0.0,
+                    max: maxDuration,
+                    divisions: 60, // Số bước chia nhỏ
+                    activeColor: Colors.orange,
+                    inactiveColor: Colors.grey,
+                    labels: RangeLabels(
+                      startValue.toStringAsFixed(1),
+                      endValue.toStringAsFixed(1),
+                    ),
+                    onChanged: (RangeValues values) {
+                      setState(() {
+                        startValue = values.start;
+                        endValue = values.end;
+                      });
+                    },
+                  ),
+                ),
+
+                // Hiển thị thời gian bắt đầu và kết thúc
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Start: ${startValue.toStringAsFixed(1)}s',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      Text(
+                        'End: ${endValue.toStringAsFixed(1)}s',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Thanh công cụ
+          Container(
+            color: Colors.black,
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.delete, color: Colors.white),
+                  onPressed: () {
+                    // Xử lý nút Delete
+                  },
+                ),
+                IconButton(
+                  icon: Icon(Icons.edit, color: Colors.white),
+                  onPressed: () {
+                    // Xử lý nút Edit
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+//////////
+// if (controller != null)
+// Column(
+// children: [
+// Row(
+// mainAxisAlignment: MainAxisAlignment.center,
+// children: [
+// IconButton(
+// onPressed: () {
+// setState(() {
+// if (isPlaying) {
+// controller!.video.pause();
+// } else {
+// controller!.video.play();
+// }
+// isPlaying = !isPlaying;
+// });
+// },
+// icon: Icon(
+// isPlaying ? Icons.pause : Icons.play_arrow,
+// color: Colors.white,
+// ))
+// ],
+// ),
+// Expanded(
+// child: Column(
+// mainAxisAlignment: MainAxisAlignment.start,
+// children: _trimSlider(),
+// ),
+// ),
+// Row(
+// children: [
+// IconButton(
+// onPressed: () {},
+// icon: Icon(
+// Icons.arrow_back_ios,
+// color: Colors.white,
+// )),
+// IconButton(
+// onPressed: () {},
+// icon: Icon(Icons.delete, color: Colors.white)),
+// IconButton(
+// onPressed: () {
+// Navigator.push(
+// context,
+// MaterialPageRoute(
+// builder: (context) => CropScreen(file: file!)));
+// },
+// icon: Icon(Icons.cut, color: Colors.white))
+// ],
+// ),
+// //_coverSelection()
+// ],
+// ),

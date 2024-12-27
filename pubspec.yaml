@@ -23,6 +23,10 @@ dependencies:
   video_editor: ^3.0.0
   cupertino_icons: ^1.0.8
   fraction: ^4.1.4
+  video_thumbnail: ^0.5.3
+  device_info_plus: ^11.2.0
+  flutter_bloc: ^8.1.6
+  equatable: ^2.0.3
 
 dev_dependencies:
   flutter_test:

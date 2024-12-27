@@ -1,11 +1,14 @@
-import 'package:editor_app/editor/screen/Crop_screen.dart';
-import 'package:editor_app/editor/screen/crop_page.dart';
-import 'package:editor_app/editor/service/picker_service.dart';
+import 'dart:developer';
 
+import 'package:editor_app/editor/model/media.dart';
+import 'package:editor_app/editor/model/time_line.dart';
+import 'package:editor_app/editor/service/picker_service.dart';
 import 'package:editor_app/editor/widgets/add_text_widgets.dart';
-import 'package:video_editor/video_editor.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import 'dart:io';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,65 +18,241 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _exportingProgress = ValueNotifier<double>(0.0);
-  final _isExporting = ValueNotifier<bool>(false);
-  VideoEditorController? controller;
+  int lastScrollTime = 0;
+  int totalTime = 0;
+  List<Media> media = [];
+  bool isLoading = false;
+  VideoPlayerController? videoPlayerController;
   Color colorText = Colors.white;
   PickerService pickerService = PickerService();
   List<File> _selectedFiles = [];
   File? file;
   String? outputVideoPath;
-  double _start = 0.0;
-  double _end = 0.0;
   bool isPlaying = false;
-  List<String> _thumbnails = [];
+  List<File> _thumbnails = [];
   final double height = 60;
-  ScrollController? scrollController;
+  ScrollController? scrollController1;
+  ScrollController? scrollController2;
+  int? selectedBlockIndex;
+  double startValue = 0.0;
+  double endValue = 6.0;
+  double maxDuration = 6.0;
+
+  //List<String?> thumbnails = [];
+  double playheadPosition = 0.0;
+  double _maxDuration = 6.0;
+  int _currentVideoIndex = 0;
+  List<TimelineBlock> timelines = [
+    TimelineBlock(
+      start: 0,
+      end: 2,
+      content: 'hello',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+    TimelineBlock(
+      start: 2,
+      end: 4,
+      content: 'xin chào',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
-    scrollController = ScrollController();
+    scrollController1 = ScrollController();
+    scrollController2 = ScrollController()..addListener(updateTimeLine);
+    if (_selectedFiles.isNotEmpty) _initializeAndPlayVideo(_currentVideoIndex);
+  }
 
-    if (outputVideoPath != null) file = File(outputVideoPath!);
-    if (file != null) {
-      controller = VideoEditorController.file(
-        file!,
-        minDuration: const Duration(seconds: 1),
-        maxDuration: const Duration(seconds: 60),
-      );
-      controller!
-          .initialize(aspectRatio: 9 / 16)
-          .then((_) => setState(() {}))
-          .catchError((error) {
-        // handle minumum duration bigger than video duration error
-        Navigator.pop(context);
-      }, test: (e) => e is VideoMinDurationError);
-     // controller!.addListener(_updateScrollPosition);
+  void _initializeAndPlayVideo(int index) {
+    if (videoPlayerController != null) {
+      videoPlayerController!.dispose(); // Giải phóng bộ nhớ cho controller cũ
+    }
+    if (_selectedFiles[index] != null) {
+      videoPlayerController = VideoPlayerController.file(
+        _selectedFiles[index],
+      )..initialize().then((_) async {
+          print(
+              "=================================================Controller initialized successfully");
+          setState(() {}); // Cập nhật giao diện
+          videoPlayerController!.addListener(() {
+            print(
+                "===============================================Duration: ${videoPlayerController!.value.position.inSeconds}");
+            print(
+                "===============================================Current Position: ${videoPlayerController!.value.duration.inSeconds}");
+            _scrollBasedOnVideoPosition();
+            if (videoPlayerController!.value.position.inSeconds >=
+                videoPlayerController!.value.duration.inSeconds) {
+              _playNextVideo();
+            }
+          });
+          videoPlayerController!.play(); // Đảm bảo video được phát
+        }).catchError((error) {
+          print(
+              "========================================================Error during initialization: $error");
+        });
+    }
+  }
+
+  void _scrollBasedOnVideoPosition() {
+    if (videoPlayerController != null) {
+      int currentTime = videoPlayerController!.value.position.inSeconds;
+      if (currentTime - lastScrollTime >= 1) {
+        double position = scrollController2!.position.pixels + 50;
+        scrollController2!.animateTo(
+          position,
+          duration: Duration(milliseconds: 0),
+          curve: Curves.easeInOut,
+        );
+
+        lastScrollTime = currentTime;
+      }
+    }
+  }
+
+  void updateTimeLine() {
+    if (scrollController1!.hasClients) {
+      scrollController1!.animateTo(scrollController2!.offset,
+          duration: Duration(milliseconds: 10), curve: Curves.easeInOut);
+      double scrollPosition = scrollController2!.offset;
+      videoPlayerController!.seekTo(Duration(seconds: scrollPosition.toInt()));
+      //scrollController1!.jumpTo(scrollController2!.offset);
+    }
+  }
+
+  void _playNextVideo() {
+    if (_currentVideoIndex < _selectedFiles.length - 1) {
+      setState(() {
+        _currentVideoIndex++;
+        _initializeAndPlayVideo(_currentVideoIndex);
+      });
+
+      _initializeAndPlayVideo(_currentVideoIndex);
+      videoPlayerController!.play();
+    } else {
+      setState(() {
+        videoPlayerController!.pause();
+        _currentVideoIndex = 0;
+      });
+      lastScrollTime = 0;
+      log("===================Đã phát hết danh sách video.");
     }
   }
 
   void dispose() {
-    scrollController!.dispose();
+    scrollController1!.dispose();
+    scrollController2!.dispose();
+
     //controller!.removeListener(_updateScrollPosition);
     super.dispose();
   }
 
-  void _updateScrollPosition() {
-    if (controller!.isPlaying) {
-      final double position =
-          controller!.trimPosition * controller!.videoDuration.inSeconds * 100;
+  Future<void> _generateThumbnails() async {
+    setState(() {
+      isLoading = true;
+    });
+    final tempDir = await getTemporaryDirectory();
 
-      scrollController!.animateTo(
-        position,
-        duration: Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-      );
+    for (int k = 0; k < _selectedFiles.length; k++) {
+      // Tạo một VideoPlayerController mới cho video hiện tại
+      final tempController = VideoPlayerController.file(_selectedFiles[k]);
+      await tempController.initialize(); // Đảm bảo khởi tạo xong
+
+      final int length =
+          tempController.value.duration.inSeconds; // Lấy độ dài video
+      print("============================================ Duration = $length");
+
+      List<File> files = [];
+      totalTime += length;
+
+      if (length > 0) {
+        for (int i = 0; i < length; i++) {
+          // Lấy thumbnail tại mỗi giây (timeMs = i * 1000)
+          int timeMs = i * 1000; // Lấy thumbnail mỗi giây
+          print("=============================================$timeMs");
+
+          // Tạo tên file duy nhất cho mỗi thumbnail
+          final String thumbnailFileName =
+              'thumbnail_${k}_${i}.png'; // Tên file thumbnail duy nhất
+          final String thumbnailPath = '${tempDir.path}/$thumbnailFileName';
+
+          // Tạo thumbnail và lưu vào file
+          final result = await VideoThumbnail.thumbnailFile(
+            video: _selectedFiles[k].path,
+            thumbnailPath: thumbnailPath,
+            imageFormat: ImageFormat.PNG,
+            timeMs: timeMs,
+            quality: 50,
+          );
+
+          if (result != null) {
+            files.add(File(result));
+            setState(() {
+              _thumbnails.add(File(result));
+            });
+          }
+        }
+      }
+
+      // Lưu thông tin media
+      media.add(Media(
+        file: _selectedFiles[k],
+        end: totalTime,
+        start: totalTime + length,
+        images: files,
+      ));
+
+      // Giải phóng controller sau khi dùng xong
+      await tempController.dispose();
     }
+
+    setState(() {
+      isLoading = false;
+    });
   }
 
-  @override
+  // void _updateScrollPosition() {
+  //   if (videoPlayerController!.value.isPlaying) {
+  //     final double position =
+  //         controller!.trimPosition * controller!.videoDuration.inSeconds * 100;
+  //     scrollController!.animateTo(
+  //       position,
+  //       duration: Duration(milliseconds: 200),
+  //       curve: Curves.easeOut,
+  //     );
+  //   }
+  // }
 
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -95,152 +274,283 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {})
         ],
       ),
-      body: Column(children: [
-        controller == null
-            ? Expanded(flex: 1, child: Container())
-            : Expanded(
-                flex: 1,
-                child: Container(
-                  padding: EdgeInsets.all(10),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CropGridViewer.preview(controller: controller!),
-                      AnimatedBuilder(
-                        animation: controller!.video,
-                        builder: (_, __) => AnimatedOpacity(
-                          opacity: controller!.isPlaying ? 0 : 1,
-                          duration: kThemeAnimationDuration,
-                          child: GestureDetector(
-                            onTap: controller!.video.play,
-                            child: Container(
-                              width: 40,
-                              height: 40,
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow,
-                                color: Colors.black,
+      body: isLoading
+          ? Container(
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : Column(children: [
+              videoPlayerController == null
+                  ? Expanded(flex: 1, child: Container())
+                  : Expanded(
+                      flex: 1,
+                      child: Container(
+                        padding: EdgeInsets.all(10),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            VideoPlayer(videoPlayerController!),
+                            AnimatedBuilder(
+                              animation: videoPlayerController!,
+                              builder: (_, __) => AnimatedOpacity(
+                                opacity: videoPlayerController!.value.isPlaying
+                                    ? 0
+                                    : 1,
+                                duration: kThemeAnimationDuration,
+                                child: GestureDetector(
+                                  onTap: videoPlayerController!.value.isPlaying
+                                      ? videoPlayerController!.pause
+                                      : videoPlayerController!.play,
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.play_arrow,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-        Expanded(
-            flex: 1,
-            child: Container(
-              color: Colors.black,
-              child: Stack(
-                children: [
-                  if (controller != null)
-                    Column(
+                    ),
+              Expanded(
+                  flex: 1,
+                  child: Container(
+                    color: Colors.black,
+                    child: Stack(
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IconButton(
-                                onPressed: () {
-                                  setState(() {
-                                    if (isPlaying) {
-                                      controller!.video.pause();
-                                    } else {
-                                      controller!.video.play();
-                                    }
-                                    isPlaying = !isPlaying;
-                                  });
-                                },
-                                icon: Icon(
-                                  isPlaying ? Icons.pause : Icons.play_arrow,
-                                  color: Colors.white,
-                                ))
-                          ],
+                        Container(
+                          color: Colors.black,
+                          child: videoPlayerController == null
+                              ? Container()
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      height: 30,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          IconButton(
+                                            onPressed: videoPlayerController !=
+                                                        null &&
+                                                    videoPlayerController!
+                                                        .value.isInitialized
+                                                ? () {
+                                                    if (videoPlayerController!
+                                                        .value.isPlaying) {
+                                                      videoPlayerController!
+                                                          .pause();
+                                                    } else {
+                                                      videoPlayerController!
+                                                          .play();
+                                                    }
+                                                    setState(() {
+                                                      isPlaying = !isPlaying;
+                                                    });
+                                                  }
+                                                : null,
+                                            // Không hoạt động nếu videoPlayerController chưa được khởi tạo
+                                            icon: Icon(
+                                              isPlaying
+                                                  ? Icons.pause
+                                                  : Icons.play_arrow,
+                                              color: Colors.white,
+                                            ),
+                                          )
+                                        ],
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    Container(
+                                      height: 40,
+                                      margin:
+                                          EdgeInsets.symmetric(horizontal: 16),
+                                      child: SingleChildScrollView(
+                                        physics: NeverScrollableScrollPhysics(),
+                                        scrollDirection: Axis.horizontal,
+                                        controller: scrollController1,
+                                        child: Row(
+                                            children: [
+                                          Container(
+                                            width: 190,
+                                          )
+                                        ]..addAll(List.generate(totalTime + 5,
+                                                  (index) {
+                                                return Container(
+                                                  width: 50,
+                                                  child: Text(
+                                                    "$index",
+                                                    style: TextStyle(
+                                                        color: Colors.white),
+                                                  ),
+                                                );
+                                              }))),
+                                      ),
+                                    ),
+                                    SizedBox(height: 5),
+                                    Container(
+                                      height: 60,
+                                      margin:
+                                          EdgeInsets.symmetric(horizontal: 16),
+                                      child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          controller: scrollController2,
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 190,
+                                              )
+                                            ]..addAll(media
+                                                .map((mediaItem) => Container(
+                                                      child: Row(
+                                                        children:
+                                                            mediaItem.images
+                                                                .map((image) =>
+                                                                    Container(
+                                                                      width: 50,
+                                                                      decoration: BoxDecoration(
+                                                                          border: Border.all(
+                                                                              width: 1,
+                                                                              color: Colors.grey)),
+                                                                      child: Image
+                                                                          .file(
+                                                                              image),
+                                                                    ))
+                                                                .toList(),
+                                                      ),
+                                                    ))
+                                                .toList()
+                                              ..add(Container(
+                                                width: 200,
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.center,
+                                                  children: [
+                                                    Container(
+                                                      width: 50,
+                                                    ),
+                                                    Icon(
+                                                      Icons.arrow_forward_ios,
+                                                      size: 30,
+                                                      color: Colors.white,
+                                                    ),
+                                                    Icon(
+                                                      Icons.arrow_forward_ios,
+                                                      size: 30,
+                                                      color: Colors.white,
+                                                    ),
+                                                    Icon(
+                                                      Icons.arrow_forward_ios,
+                                                      size: 30,
+                                                      color: Colors.white,
+                                                    ),
+                                                    Icon(
+                                                      Icons.arrow_forward_ios,
+                                                      size: 30,
+                                                      color: Colors.white,
+                                                    )
+                                                  ],
+                                                ),
+                                              ))),
+                                          )),
+                                    ),
+                                    SizedBox(height: 10),
+                                    Container(
+                                      height:
+                                          200, // Giới hạn chiều cao cho ListView thứ 2
+                                      child: ListView.builder(
+                                        itemBuilder: (context, index) {
+                                          return Row(
+                                            children: [
+                                              Expanded(
+                                                child: Container(
+                                                  height: 30,
+                                                  color: Colors.yellow,
+                                                  child: Center(
+                                                    child: Text(
+                                                      "${timelines[index].content}",
+                                                      style: TextStyle(
+                                                          color: Colors.white),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          );
+                                        },
+                                        itemCount: timelines.length,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                         ),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: _trimSlider(),
+                        Positioned(
+                          left: MediaQuery.of(context).size.width / 2 - 1,
+                          top: 40,
+                          bottom: 50,
+                          child: Container(
+                            width: 2,
+                            color: Colors.white,
                           ),
                         ),
-                        Row(
-                          children: [
-                            IconButton(
-                                onPressed: () {},
-                                icon: Icon(
-                                  Icons.arrow_back_ios,
-                                  color: Colors.white,
-                                )),
-                            IconButton(
-                                onPressed: () {},
-                                icon: Icon(Icons.delete, color: Colors.white)),
-                            IconButton(
-                                onPressed: () {
-                                  Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (context) => CropScreen(file: file!)));
-                                },
-                                icon: Icon(Icons.cut, color: Colors.white))
-                          ],
-                        ),
-                        //_coverSelection()
+                        Positioned(
+                            right: 10,
+                            top: 180,
+                            child: Column(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(15),
+                                    color: Colors.white,
+                                  ),
+                                  child: IconButton(
+                                      onPressed: () {
+                                        _showOptions();
+                                      },
+                                      icon: Icon(Icons.add)),
+                                ),
+                                SizedBox(
+                                  height: 20,
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(15),
+                                    color: Colors.white,
+                                  ),
+                                  child: IconButton(
+                                      onPressed: () {
+                                        _showOptions();
+                                      },
+                                      icon: Icon(Icons.music_note_outlined)),
+                                ),
+                                SizedBox(
+                                  height: 20,
+                                ),
+                                Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(15),
+                                    color: Colors.white,
+                                  ),
+                                  child: IconButton(
+                                      onPressed: () {
+                                        _showAddText();
+                                      },
+                                      icon: Icon(Icons.text_format)),
+                                ),
+                              ],
+                            )),
                       ],
                     ),
-                  Positioned(
-                      right: 10,
-                      top: 180,
-                      child: Column(
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              color: Colors.white,
-                            ),
-                            child: IconButton(
-                                onPressed: () {
-                                  _showOptions();
-                                },
-                                icon: Icon(Icons.add)),
-                          ),
-                          SizedBox(
-                            height: 20,
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              color: Colors.white,
-                            ),
-                            child: IconButton(
-                                onPressed: () {
-                                  _showOptions();
-                                },
-                                icon: Icon(Icons.music_note_outlined)),
-                          ),
-                          SizedBox(
-                            height: 20,
-                          ),
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              color: Colors.white,
-                            ),
-                            child: IconButton(
-                                onPressed: () {
-                                  _showAddText();
-                                },
-                                icon: Icon(Icons.text_format)),
-                          ),
-                        ],
-                      )),
-                ],
-              ),
-            ))
-      ]),
+                  ))
+            ]),
     );
   }
 
@@ -249,55 +559,10 @@ class _HomeScreenState extends State<HomeScreen> {
         duration.inSeconds.remainder(60).toString().padLeft(2, '0')
       ].join(":");
 
-  List<Widget> _trimSlider() {
-    return [
-      AnimatedBuilder(
-        animation: Listenable.merge([
-          controller,
-          controller!.video,
-        ]),
-        builder: (_, __) {
-          final int duration = controller!.videoDuration.inSeconds;
-          final double pos = controller!.trimPosition * duration;
-
-          return Padding(
-            padding: EdgeInsets.symmetric(horizontal: height / 4),
-            child: Row(children: [
-              Text(
-                formatter(Duration(seconds: duration)),
-                style: TextStyle(color: Colors.white),
-              ),
-              const Expanded(child: SizedBox()),
-              AnimatedOpacity(
-                opacity: controller!.isTrimming ? 1 : 0,
-                duration: kThemeAnimationDuration,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text(formatter(controller!.startTrim),
-                      style: TextStyle(color: Colors.white)),
-                  const SizedBox(width: 10),
-                  Text(formatter(controller!.endTrim),
-                      style: TextStyle(color: Colors.white)),
-                ]),
-              ),
-            ]),
-          );
-        },
-      ),
-      Container(
-        width: MediaQuery.of(context).size.width,
-        margin: EdgeInsets.symmetric(vertical: height / 4),
-        child: TrimSlider(
-          controller: controller!,
-          height: height,
-          horizontalMargin: height / 4,
-          child: TrimTimeline(
-            controller: controller!,
-            padding: const EdgeInsets.only(top: 10),
-            textStyle: TextStyle(color: Colors.white),
-          ),
-        ),
-      )
-    ];
+  String formatTime(double seconds) {
+    int minutes = seconds ~/ 60;
+    int secs = seconds.toInt() % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   void _showAddText() {
@@ -346,32 +611,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 final files = await pickerService.pickMultipleFiles();
                 _selectedFiles
                     .addAll(files.map((files) => (File(files))).toList());
-                outputVideoPath = await pickerService.createVideoFromImages(
-                    _selectedFiles.map((st) => st.path).toList());
-                if (outputVideoPath != null)
-                  _thumbnails =
-                      await pickerService.generateThumbnails(outputVideoPath!);
+                await _generateThumbnails();
                 setState(() {
-                  outputVideoPath = files[0];
-                  if (outputVideoPath != null) file = File(outputVideoPath!);
-                  if (file != null) {
-                    controller = VideoEditorController.file(
-                      file!,
-                      minDuration: const Duration(seconds: 1),
-                      maxDuration: const Duration(seconds: 60),
-                    );
-
-                    controller!
-                        .initialize(aspectRatio: 9 / 16)
-                        .then((_) => setState(() {}))
-                        .catchError((error) {
-                      // handle minumum duration bigger than video duration error
-                      Navigator.pop(context);
-                    }, test: (e) => e is VideoMinDurationError);
-                    controller!.addListener(_updateScrollPosition);
+                  if (_selectedFiles.isNotEmpty) {
+                    _thumbnails = _thumbnails;
+                    _initializeAndPlayVideo(_currentVideoIndex);
                   }
                   _thumbnails = _thumbnails;
-                  //  outputVideoPath = outputVideoPath;
                 });
                 outputVideoPath = outputVideoPath;
               },

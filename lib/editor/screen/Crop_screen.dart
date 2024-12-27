@@ -1,5 +1,5 @@
-import 'dart:io';
 
+import 'dart:io';
 import 'package:editor_app/editor/service/export_service.dart';
 import 'package:flutter/material.dart';
 import 'package:video_editor/video_editor.dart';
@@ -12,7 +12,6 @@ class CropScreen extends StatefulWidget {
   @override
   State<CropScreen> createState() => _CropScreenState();
 }
-
 class _CropScreenState extends State<CropScreen> {
   final _exportingProgress = ValueNotifier<double>(0.0);
   final _isExporting = ValueNotifier<bool>(false);
@@ -173,30 +172,5 @@ class _CropScreenState extends State<CropScreen> {
     ];
   }
 
-  Widget _coverSelection() {
-    return SingleChildScrollView(
-      child: Center(
-        child: Container(
-          margin: const EdgeInsets.all(15),
-          child: CoverSelection(
-            controller: _controller,
-            size: height + 10,
-            quantity: 8,
-            selectedCoverBuilder: (cover, size) {
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  cover,
-                  Icon(
-                    Icons.check_circle,
-                    color: const CoverSelectionStyle().selectedBorderColor,
-                  )
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
+
 }
